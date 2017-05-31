@@ -5,7 +5,7 @@ authors = ["Sevag Hanssian <sevag.hanssian@gmail.com>"]
 description = "cli/daemon for music"
 repository = "https://github.com/sevagh/surge"
 readme = "./README.md"
-license = "Apache"
+license = "Apache-2.0"
 keywords = ["music", "cli"]
 
 [dependencies]
