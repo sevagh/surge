@@ -1,13 +1,15 @@
 #![crate_type = "bin"]
 
-#[macro_use]
-extern crate serde_derive;
+#[macro_use] extern crate serde_derive;
+#[macro_use] extern crate lazy_static;
 extern crate serde;
 extern crate serde_json;
 extern crate hyper;
 extern crate hyper_native_tls;
 extern crate toml;
 extern crate rustyline;
+extern crate rodio;
+extern crate regex;
 
 mod youtube;
 mod youtube_dl;
@@ -24,6 +26,7 @@ use std::io::BufReader;
 use std::io::prelude::*;
 
 const SURGE_DIR: &'static str = ".surge";
+const SURGE_PROMPT: &'static str = "surge ♫ ";
 
 #[derive(Deserialize)]
 struct Config {
@@ -67,12 +70,14 @@ fn main() {
         ()
     }
     loop {
-        let readline = rl.readline("surge ♫ ");
+        let readline = rl.readline(SURGE_PROMPT);
         match readline {
             Ok(line) => {
                 rl.add_history_entry(&line);
                 if line != "" {
                     cmd.search(line);
+                    cmd.select(0);
+                    cmd.play_current();
                 }
                 continue;
             }
