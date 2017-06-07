@@ -13,6 +13,7 @@ pub struct CommandCenter {
     backend: Box<Backend>,
     currents: Vec<BackendSearchResult>,
     current: Option<BackendSearchResult>,
+    sink: rodio::Sink,
 }
 
 impl CommandCenter {
@@ -25,42 +26,65 @@ impl CommandCenter {
             currents: vec![],
             current: None,
             ytdl: YoutubeDl::new(download_path),
+            sink: rodio::Sink::new(&rodio::get_default_endpoint().unwrap()),
         }
     }
 
-    pub fn search(&mut self, search: String) {
-        self.currents = self.backend.search(search.as_str())
+    pub fn handle_command(&mut self, command: &str) {
+        match command {
+            "" => (),
+            "play" => self.play_current(),
+            "pause" => self.pause(),
+            "resume" => self.resume(),
+            "related" => {
+                self.find_related();
+                self.select(1);
+            }
+            x => {
+                self.search(x);
+                self.select(1);
+            }
+        }
     }
 
-    pub fn select(&mut self, sel: usize) {
+    fn search(&mut self, search: &str) {
+        self.currents = self.backend.search(search)
+    }
+
+    fn select(&mut self, sel: usize) {
         self.current = self.currents.get(sel).cloned()
     }
 
-    pub fn find_related(&mut self) {
+    fn find_related(&mut self) {
         match self.current {
             Some(ref x) => self.currents = self.backend.find_related_tracks(x.id.as_str()),
             None => panic!("No current selection"),
         }
     }
 
-    pub fn play_current(&mut self) {
+    fn play_current(&mut self) {
         match self.current {
             Some(ref x) => {
                 let path = download_audio(&self.ytdl, self.backend.gen_download_url(x.id.as_str()));
-                let endpoint = rodio::get_default_endpoint().unwrap();
-                let sink = rodio::Sink::new(&endpoint);
-
                 match File::open(path) {
                     Ok(file) => {
-                        sink.append(rodio::Decoder::new(BufReader::new(file)).unwrap());
-
-                        sink.sleep_until_end();
+                        self.sink
+                            .append(rodio::Decoder::new(BufReader::new(file)).unwrap());
+                        self.sink.play();
                     }
                     Err(e) => panic!(e),
                 }
             }
             None => panic!("No current selection"),
         }
+    }
+
+    fn pause(&mut self) {
+        self.sink.pause();
+    }
+
+    fn resume(&mut self) {
+        self.sink.play();
     }
 }
 

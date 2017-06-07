@@ -76,11 +76,7 @@ fn main() {
         match readline {
             Ok(line) => {
                 rl.add_history_entry(&line);
-                if line != "" {
-                    cmd.search(line);
-                    cmd.select(0);
-                    cmd.play_current();
-                }
+                cmd.handle_command(&line);
                 continue;
             }
             Err(ReadlineError::Interrupted) => continue,
