@@ -1,4 +1,5 @@
 download_path = "/path/to/music/dir"
 
-[keys]
-youtube = "my_youtube_api_key"
+[youtube]
+api_key = "my_youtube_api_key"
+max_results = 5

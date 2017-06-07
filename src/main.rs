@@ -5,32 +5,35 @@ extern crate clap;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
+extern crate serde_json;
 extern crate hyper;
 extern crate hyper_native_tls;
 extern crate toml;
+extern crate rustyline;
 
+mod youtube;
 mod youtube_dl;
 
-use hyper::Client;
-use hyper::net::HttpsConnector;
-use hyper_native_tls::NativeTlsClient;
-use youtube_dl::download_audio_from_youtube;
+use youtube_dl::YoutubeDl;
+use youtube::YoutubePlayer;
+
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
 
 use std::fs::File;
 use std::io::BufReader;
 use std::io::prelude::*;
 
-const YT_API_URL: &'static str = "https://www.googleapis.com/youtube/v3";
-
 #[derive(Deserialize)]
 struct Config {
     download_path: String,
-    keys: Keys,
+    youtube: Yt,
 }
 
 #[derive(Deserialize)]
-struct Keys {
-    youtube: String,
+struct Yt {
+    api_key: String,
+    max_results: u32,
 }
 
 fn main() {
@@ -48,7 +51,7 @@ fn main() {
                 default_conf_path.as_str())
         {file_exists} "Sets a custom config file")
     )
-        .get_matches();
+            .get_matches();
 
     let mut config_contents = String::new();
     match File::open(matches.value_of("config").unwrap()) {
@@ -61,19 +64,35 @@ fn main() {
         }
         Err(e) => panic!(e),
     }
-    
+
     let config: Config = toml::from_str(config_contents.as_str()).unwrap();
 
-    let video_id = "mQuIy3KWpRw&";
-    let ssl = NativeTlsClient::new().unwrap();
-    let connector = HttpsConnector::new(ssl);
-    let client = Client::with_connector(connector);
-    let res = client.get(format!("{0}/search?part=snippet&relatedToVideoId={1}&type=video&key={2}", YT_API_URL, video_id, config.keys.youtube).as_str())
-            .send();
-    match res {
-        Ok(res) => println!("Response: {}", res.status),
-        Err(e) => println!("Err: {:?}", e)
-    }
+    let ytplayer = YoutubePlayer::new(config.youtube.api_key,
+                                      config.youtube.max_results);
+    let ytdl = YoutubeDl::new(config.download_path);
 
-    download_audio_from_youtube(video_id, config.download_path.as_str());
+    let history_path = format!("{}/.surge/history.txt", env!("HOME"));
+    let history_path = history_path.as_str();
+
+    let mut rl = Editor::<()>::new();
+    if let Err(_) = rl.load_history(history_path) {
+        ()
+    }
+    loop {
+        let readline = rl.readline("surge ♫ ");
+        match readline {
+            Ok(line) => {
+                rl.add_history_entry(&line);
+                println!("Line: {}", line);
+                //ytplayer.find_related_tracks(&line);
+                //ytplayer.download_audio_from(&line);
+                ytplayer.search_video(line);
+                continue;
+            }
+            Err(ReadlineError::Interrupted) => continue,
+            Err(ReadlineError::Eof) |
+            Err(_) => break,
+        }
+    }
+    rl.save_history(history_path).unwrap();
 }

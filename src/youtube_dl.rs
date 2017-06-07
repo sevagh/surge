@@ -1,19 +1,31 @@
 use std::process::Command;
 
-const YT_VID_BASE_URL: &'static str = "https://www.youtube.com/watch?v=";
+pub struct YoutubeDl {
+    dl_path: String,
+}
 
-pub fn download_audio_from_youtube(video_id: &str, dl_path: &str) {
-    let dl_opt = format!("{0}/%(title)s.%(ext)s", dl_path);
-    let dl_url = format!("{0}{1}", YT_VID_BASE_URL, video_id);
+impl YoutubeDl {
+    pub fn new(dl_path: String) -> YoutubeDl {
+        YoutubeDl {
+            dl_path
+        }
+    }
 
-    let output = Command::new("youtube-dl")
-        .args(&["--extract-audio",
-                "--audio-format", "best",
-                "--audio-quality", "0",
-                "-o", &dl_opt,
-                &dl_url])
-        .output()
-        .expect("Failed to run youtube-dl command");
+    pub fn download_audio_from_url(&self, url: &str) {
+        let dl_opt = format!("{0}/%(title)s.%(ext)s", self.dl_path);
 
-    println!("{:?}", output);
+        let output = Command::new("youtube-dl")
+            .args(&["--extract-audio",
+                    "--audio-format",
+                    "best",
+                    "--audio-quality",
+                    "0",
+                    "-o",
+                    &dl_opt,
+                    url])
+            .output()
+            .expect("Failed to run youtube-dl command");
+
+        println!("{:?}", output);
+    }
 }
