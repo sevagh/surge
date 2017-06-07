@@ -11,6 +11,7 @@ dependencies = [
  "serde 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "text_io 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -548,6 +549,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "text_io"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "thread-id"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -739,6 +745,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum syn 0.11.11 (registry+https://github.com/rust-lang/crates.io-index)" = "d3b891b9015c88c576343b9b3e41c2c11a51c219ef067b264bd9c8aa9b441dad"
 "checksum synom 0.11.3 (registry+https://github.com/rust-lang/crates.io-index)" = "a393066ed9010ebaed60b9eafa373d4b1baac186dd7e008555b0f702b51945b6"
 "checksum tempdir 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)" = "87974a6f5c1dfb344d733055601650059a3363de2a6104819293baff662132d6"
+"checksum text_io 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "090d2ee73ae8f01646d500fbb72f99f0b2aea174b7b15d58359bbdf083f73e6d"
 "checksum thread-id 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8df7875b676fddfadffd96deea3b1124e5ede707d4884248931077518cf1f773"
 "checksum thread_local 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "c85048c6260d17cf486ceae3282d9fb6b90be220bf5b28c400f5485ffc29f0c7"
 "checksum time 0.1.37 (registry+https://github.com/rust-lang/crates.io-index)" = "ffd7ccbf969a892bf83f1e441126968a07a3941c24ff522a26af9f9f4585d1a3"

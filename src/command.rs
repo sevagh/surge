@@ -26,33 +26,43 @@ impl CommandCenter {
             currents: vec![],
             current: None,
             ytdl: YoutubeDl::new(download_path),
-            sink: rodio::Sink::new(&rodio::get_default_endpoint().unwrap()),
+            sink: default_sink(),
         }
     }
 
     pub fn handle_command(&mut self, command: &str) {
-        match command {
+        let cmd_split = command.splitn(2, ' ').collect::<Vec<&str>>();
+        match cmd_split[0] {
             "" => (),
             "play" => self.play_current(),
             "pause" => self.pause(),
             "resume" => self.resume(),
             "related" => {
                 self.find_related();
-                self.select(1);
+                self.select_interactive();
             }
-            x => {
-                self.search(x);
-                self.select(1);
+            "search" => {
+                if cmd_split.len() == 2 {
+                    self.search(cmd_split[1]);
+                    self.select_interactive();
+                } else {
+                    println!("Please enter non-empty search terms");
+                }
             }
+            _ => println!("Unrecognized command!"),
         }
+    }
+
+    fn select_interactive(&mut self) {
+        for (i, x) in self.currents.iter().enumerate() {
+            println!("{0}: {1}", i, x.title)
+        }
+        let sel: usize = read!();
+        self.current = self.currents.get(sel).cloned()
     }
 
     fn search(&mut self, search: &str) {
         self.currents = self.backend.search(search)
-    }
-
-    fn select(&mut self, sel: usize) {
-        self.current = self.currents.get(sel).cloned()
     }
 
     fn find_related(&mut self) {
@@ -64,7 +74,7 @@ impl CommandCenter {
 
     fn play_current(&mut self) {
         match self.current {
-            Some(ref x) => {
+            Some(ref mut x) => {
                 let path = download_audio(&self.ytdl, self.backend.gen_download_url(x.id.as_str()));
                 match File::open(path) {
                     Ok(file) => {
@@ -93,4 +103,8 @@ fn download_audio(ytdl: &YoutubeDl, url: String) -> String {
         Ok(x) => x,
         Err(e) => panic!(e),
     }
+}
+
+fn default_sink() -> rodio::Sink {
+    rodio::Sink::new(&rodio::get_default_endpoint().unwrap())
 }

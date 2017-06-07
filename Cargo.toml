@@ -19,6 +19,7 @@ rustyline = "1.0.0"
 rodio = "0.5.0"
 regex = "0.2.2"
 lazy_static = "0.2.8"
+text_io = "0.1.6"
 
 [profile.release]
 debug = true
