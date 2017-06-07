@@ -58,15 +58,14 @@ impl CommandCenter {
                     }
                     Err(e) => panic!(e),
                 }
-            },
+            }
             None => panic!("No current selection"),
         }
     }
 }
 
 fn download_audio(ytdl: &YoutubeDl, url: String) -> String {
-    match ytdl.download_audio_from_url(url)
-    {
+    match ytdl.download_audio_from_url(url) {
         Ok(x) => x,
         Err(e) => panic!(e),
     }

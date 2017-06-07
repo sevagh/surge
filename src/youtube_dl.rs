@@ -16,19 +16,21 @@ impl YoutubeDl {
         let dl_opt = format!("{0}/%(title)s.%(ext)s", self.dl_path);
 
         match Command::new("youtube-dl")
-            .args(&["--extract-audio",
-                    "--audio-format",
-                    "flac",
-                    "--audio-quality",
-                    "0",
-                    "-o",
-                    &dl_opt,
-                    &url])
-            .output() {
-                Ok(output) => {
-                    Ok(get_dl_path_from_ytdl_stdout(String::from_utf8_lossy(&output.stdout).into_owned().as_str()))
-                }
-                Err(e) => Err(e),
+                  .args(&["--extract-audio",
+                          "--audio-format",
+                          "flac",
+                          "--audio-quality",
+                          "0",
+                          "-o",
+                          &dl_opt,
+                          &url])
+                  .output() {
+            Ok(output) => {
+                Ok(get_dl_path_from_ytdl_stdout(String::from_utf8_lossy(&output.stdout)
+                                                    .into_owned()
+                                                    .as_str()))
+            }
+            Err(e) => Err(e),
         }
     }
 }
