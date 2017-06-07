@@ -6,12 +6,10 @@ pub struct YoutubeDl {
 
 impl YoutubeDl {
     pub fn new(dl_path: String) -> YoutubeDl {
-        YoutubeDl {
-            dl_path
-        }
+        YoutubeDl { dl_path }
     }
 
-    pub fn download_audio_from_url(&self, url: &str) {
+    pub fn download_audio_from_url(&self, url: String) {
         let dl_opt = format!("{0}/%(title)s.%(ext)s", self.dl_path);
 
         let output = Command::new("youtube-dl")
@@ -22,7 +20,7 @@ impl YoutubeDl {
                     "0",
                     "-o",
                     &dl_opt,
-                    url])
+                    &url])
             .output()
             .expect("Failed to run youtube-dl command");
 

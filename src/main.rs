@@ -1,8 +1,6 @@
 #![crate_type = "bin"]
 
 #[macro_use]
-extern crate clap;
-#[macro_use]
 extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
@@ -13,9 +11,10 @@ extern crate rustyline;
 
 mod youtube;
 mod youtube_dl;
+mod command;
+mod backend;
 
-use youtube_dl::YoutubeDl;
-use youtube::YoutubePlayer;
+use command::CommandCenter;
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -23,6 +22,8 @@ use rustyline::Editor;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::prelude::*;
+
+const SURGE_DIR: &'static str = ".surge";
 
 #[derive(Deserialize)]
 struct Config {
@@ -37,24 +38,14 @@ struct Yt {
 }
 
 fn main() {
-    let file_exists = |ref path| if std::fs::metadata(path).is_ok() {
-        Ok(())
-    } else {
-        Err(format!("File {0} doesn't exist", path))
-    };
-
-    include_str!("../Cargo.toml");
-    let default_conf_path = format!("{}/.surge/surgeconf.toml", env!("HOME"));
-    let matches = clap_app!(
-        @app (app_from_crate!())
-            (@arg config: -c --config [conf] default_value(
-                default_conf_path.as_str())
-        {file_exists} "Sets a custom config file")
-    )
-            .get_matches();
+    let surge_dir = format!("{}/{}", env!("HOME"), SURGE_DIR);
+    let conf_path = format!("{}/surgeconf.toml", surge_dir);
+    let history_path = format!("{}/history.txt", surge_dir);
+    let history_path = history_path.as_str();
 
     let mut config_contents = String::new();
-    match File::open(matches.value_of("config").unwrap()) {
+
+    match File::open(conf_path) {
         Ok(x) => {
             let mut buf_reader = BufReader::new(x);
             match buf_reader.read_to_string(&mut config_contents) {
@@ -65,17 +56,14 @@ fn main() {
         Err(e) => panic!(e),
     }
 
-    let config: Config = toml::from_str(config_contents.as_str()).unwrap();
+    let config: Config = toml::from_str(&config_contents).unwrap();
 
-    let ytplayer = YoutubePlayer::new(config.youtube.api_key,
-                                      config.youtube.max_results);
-    let ytdl = YoutubeDl::new(config.download_path);
-
-    let history_path = format!("{}/.surge/history.txt", env!("HOME"));
-    let history_path = history_path.as_str();
+    let mut cmd = CommandCenter::for_youtube(config.youtube.api_key,
+                                             config.youtube.max_results,
+                                             config.download_path);
 
     let mut rl = Editor::<()>::new();
-    if let Err(_) = rl.load_history(history_path) {
+    if rl.load_history(history_path).is_err() {
         ()
     }
     loop {
@@ -83,10 +71,9 @@ fn main() {
         match readline {
             Ok(line) => {
                 rl.add_history_entry(&line);
-                println!("Line: {}", line);
-                //ytplayer.find_related_tracks(&line);
-                //ytplayer.download_audio_from(&line);
-                ytplayer.search_video(line);
+                if line != "" {
+                    cmd.search(line);
+                }
                 continue;
             }
             Err(ReadlineError::Interrupted) => continue,
