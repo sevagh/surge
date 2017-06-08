@@ -1,32 +1,41 @@
 use rodio;
+use termimage::ops;
+use terminal_size::*;
+use image::GenericImage;
 
 use youtube::YoutubePlayer;
 use youtube_dl::YoutubeDl;
 use backend::*;
 
-use std::io::BufReader;
+use std::io::{BufReader, StdoutLock, Write};
 use std::boxed::Box;
 use std::fs::File;
+use std::path::PathBuf;
 
-pub struct CommandCenter {
+const SCALE_FACTOR: f32 = 0.5;
+
+pub struct CommandCenter<'a> {
     ytdl: YoutubeDl,
     backend: Box<Backend>,
     currents: Vec<BackendSearchResult>,
     current: Option<BackendSearchResult>,
     sink: rodio::Sink,
+    out: StdoutLock<'a>,
 }
 
-impl CommandCenter {
+impl<'a> CommandCenter<'a> {
     pub fn for_youtube(youtube_api_key: String,
                        max_results: u32,
-                       download_path: String)
-                       -> CommandCenter {
+                       download_path: String,
+                       out: StdoutLock<'a>)
+                       -> CommandCenter<'a> {
         CommandCenter {
             backend: Box::new(YoutubePlayer::new(youtube_api_key, max_results)),
             currents: vec![],
             current: None,
             ytdl: YoutubeDl::new(download_path),
             sink: default_sink(),
+            out: out,
         }
     }
 
@@ -55,7 +64,9 @@ impl CommandCenter {
 
     fn select_interactive(&mut self) {
         for (i, x) in self.currents.iter().enumerate() {
-            println!("{0}: {1}", i, x.title)
+            writeln!(self.out, "{0}: {1}", i, x.title).expect("Couldn't write to stdout");
+            display_png(x.thumbnail.as_ref(), &mut self.out);
+            writeln!(self.out, "").expect("Coudln't write to stdout");
         }
         let sel: usize = read!();
         self.current = self.currents.get(sel).cloned()
@@ -79,7 +90,8 @@ impl CommandCenter {
                 match File::open(path) {
                     Ok(file) => {
                         self.sink
-                            .append(rodio::Decoder::new(BufReader::new(file)).unwrap());
+                            .append(rodio::Decoder::new(BufReader::new(file))
+                                    .expect("Coudln't make rodio decoder"));
                         self.sink.play();
                     }
                     Err(e) => panic!(e),
@@ -106,5 +118,30 @@ fn download_audio(ytdl: &YoutubeDl, url: String) -> String {
 }
 
 fn default_sink() -> rodio::Sink {
-    rodio::Sink::new(&rodio::get_default_endpoint().unwrap())
+    rodio::Sink::new(&rodio::get_default_endpoint().expect("Couldn't make rodio endpoint"))
+}
+
+fn display_png(path: Option<&PathBuf>, out: &mut StdoutLock) {
+    let path_ = match path {
+        Some(x) => x.clone(),
+        None => return,
+    };
+    let tup = &(String::new(), path_);
+    let format = match ops::guess_format(tup) {
+        Ok(x) => x,
+        Err(e) => panic!(e),
+    };
+    let img = match ops::load_image(tup, format) {
+        Ok(x) => x,
+        Err(e) => panic!(e),
+    };
+
+    if let Some((Width(w), Height(h))) = terminal_size() {
+        let (w_, h_) = (w as u32, h as u32);
+        let img_s = ops::image_resized_size(img.dimensions(), (w_, h_), true);
+        let (w__, h__) = ((SCALE_FACTOR * img_s.0 as f32) as u32,
+                          (SCALE_FACTOR * img_s.1 as f32) as u32);
+        let resized = ops::resize_image(&img, (w__, h__));
+        ops::write_ansi_truecolor(out, &resized);
+    }
 }

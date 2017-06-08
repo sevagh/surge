@@ -14,6 +14,10 @@ extern crate toml;
 extern crate rustyline;
 extern crate rodio;
 extern crate regex;
+extern crate termimage;
+extern crate image;
+extern crate tempdir;
+extern crate terminal_size;
 
 mod youtube;
 mod youtube_dl;
@@ -26,7 +30,7 @@ use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{stdout, BufReader};
 use std::io::prelude::*;
 
 const SURGE_DIR: &'static str = ".surge";
@@ -65,9 +69,11 @@ fn main() {
 
     let config: Config = toml::from_str(&config_contents).unwrap();
 
+    let out = stdout();
     let mut cmd = CommandCenter::for_youtube(config.youtube.api_key,
                                              config.youtube.max_results,
-                                             config.download_path);
+                                             config.download_path,
+                                             out.lock());
 
     let mut rl = Editor::<()>::new();
     if rl.load_history(history_path).is_err() {
