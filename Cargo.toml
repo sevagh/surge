@@ -1,6 +1,6 @@
 [package]
 name = "surge"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Sevag Hanssian <sevag.hanssian@gmail.com>"]
 description = "cli/daemon for music"
 repository = "https://github.com/sevagh/surge"

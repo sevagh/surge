@@ -27,11 +27,12 @@ use command::CommandCenter;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-use std::fs::File;
+use std::fs::{File, create_dir_all};
 use std::io::{stdout, BufReader};
 use std::io::prelude::*;
 
-const SURGE_DIR: &'static str = ".surge";
+const SURGE_CONF_DIR: &'static str = ".config/surge";
+const SURGE_CACHE_DIR: &'static str = ".cache/surge";
 const SURGE_PROMPT: &'static str = "surge ♫ ";
 
 #[derive(Deserialize)]
@@ -46,10 +47,13 @@ struct Yt {
 }
 
 fn main() {
-    let surge_dir = format!("{}/{}", env!("HOME"), SURGE_DIR);
-    let conf_path = format!("{}/surgeconf.toml", surge_dir);
-    let history_path = format!("{}/history.txt", surge_dir);
-    let history_path = history_path.as_str();
+    let conf_dir = format!("{}/{}", env!("HOME"), SURGE_CONF_DIR);
+    let cache_dir = format!("{}/{}", env!("HOME"), SURGE_CACHE_DIR);
+    let conf_path = format!("{}/surgeconf.toml", conf_dir);
+    let history_path = format!("{}/history.txt", cache_dir);
+
+    create_dir_all(conf_dir).expect("Couldn't create conf dir (if missing)");
+    create_dir_all(cache_dir).expect("Coudln't create cache dir (if missing)");
 
     let mut config_contents = String::new();
 
@@ -71,7 +75,7 @@ fn main() {
         CommandCenter::for_youtube(config.youtube.api_key, config.download_path, out.lock());
 
     let mut rl = Editor::<()>::new();
-    if rl.load_history(history_path).is_err() {
+    if rl.load_history(&history_path).is_err() {
         ()
     }
     loop {
@@ -87,5 +91,5 @@ fn main() {
             Err(_) => break,
         }
     }
-    rl.save_history(history_path).unwrap();
+    rl.save_history(&history_path).unwrap();
 }

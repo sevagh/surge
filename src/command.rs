@@ -63,7 +63,11 @@ impl<'a> CommandCenter<'a> {
                 }
             }
             "select" => self.select(cmd_split[1]),
-            _ => println!("Unrecognized command!"),
+            "help" => {
+                println!("Valid commands:\n\t\
+                                search, cycle, select, play, pause, resume, related, help")
+            }
+            _ => println!("Unrecognized command! Try 'help'"),
         }
     }
 
@@ -73,8 +77,7 @@ impl<'a> CommandCenter<'a> {
         }
         match self.currents.get(self.cycle_ctr) {
             Some(x) => {
-                writeln!(self.out, "{0}: {1}", self.cycle_ctr, x.title)
-                    .expect("Couldn't write to stdout");
+                println!("{0}: {1}", self.cycle_ctr, x.title);
                 display_png(x.thumbnail.as_ref(), &mut self.out);
             }
             None => panic!("Shouldn't happen"),
@@ -90,11 +93,10 @@ impl<'a> CommandCenter<'a> {
     fn display_current(&mut self) {
         match self.current {
             Some(ref x) => {
-                writeln!(self.out, "NOW PLAYING: {0}", x.title).expect("Couldn't write to stdout");
+                println!("NOW PLAYING: {0}", x.title);
                 display_png(x.thumbnail.as_ref(), &mut self.out);
             }
-            None => writeln!(self.out, "Nothing currently playing. Use cycle and select")
-                .expect("Couldn't write to stdout"),
+            None => println!("Nothing currently playing. Use cycle and select"),
         }
     }
 
