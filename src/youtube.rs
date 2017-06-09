@@ -12,18 +12,17 @@ use tempdir::TempDir;
 
 const YT_API_URL: &'static str = "https://www.googleapis.com/youtube/v3";
 const YT_VID_BASE_URL: &'static str = "https://www.youtube.com/watch?v=";
+const MAX_RESULTS: i32 = 5;
 
 pub struct YoutubePlayer {
     tmp_dir: TempDir,
     youtube_api_key: String,
-    max_results: u32,
 }
 
 impl YoutubePlayer {
-    pub fn new(youtube_api_key: String, max_results: u32) -> YoutubePlayer {
+    pub fn new(youtube_api_key: String) -> YoutubePlayer {
         YoutubePlayer {
             youtube_api_key: youtube_api_key,
-            max_results: max_results,
             tmp_dir: TempDir::new("surge").expect("Couldn't make tempdir"),
         }
     }
@@ -35,7 +34,6 @@ impl Backend for YoutubePlayer {
                               YT_API_URL,
                               video_id)
                               .as_str(),
-                      self.max_results,
                       &self.youtube_api_key);
         Vec::new()
     }
@@ -45,7 +43,6 @@ impl Backend for YoutubePlayer {
                                                YT_API_URL,
                                                keywords.replace(" ", "+"))
                                                .as_str(),
-                                       self.max_results,
                                        &self.youtube_api_key);
         let results: Vec<BackendSearchResult>;
         match serde_json::from_str::<serde_json::Value>(&api_result) {
@@ -92,12 +89,12 @@ impl Backend for YoutubePlayer {
     }
 }
 
-fn hyper_request(url: &str, max_results: u32, api_key: &str) -> String {
+fn hyper_request(url: &str, api_key: &str) -> String {
     let ssl = NativeTlsClient::new().expect("Couldn't make TLS client");
     let connector = HttpsConnector::new(ssl);
     let client = Client::with_connector(connector);
     let res = client
-        .get(format!("{0}&maxResults={1}&key={2}", url, max_results, api_key).as_str())
+        .get(format!("{0}&maxResults={1}&key={2}", url, MAX_RESULTS, api_key).as_str())
         .send();
     let mut ret = String::new();
     match res {
@@ -123,7 +120,6 @@ fn download_thumbnail(url: &str, uid: &str, tmp: &TempDir) -> Result<PathBuf, Th
                       uid,
                       url.rsplitn(2, '/').collect::<Vec<&str>>()[0]));
     let file_path_copy = file_path.clone();
-    println!("FILE PATH: {:?}", file_path);
     let mut tmp_file = File::create(file_path).expect("Couldn't make temp file");
 
     let ssl = NativeTlsClient::new().expect("Couldn't make TLS client");

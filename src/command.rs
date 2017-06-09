@@ -21,21 +21,22 @@ pub struct CommandCenter<'a> {
     current: Option<BackendSearchResult>,
     sink: rodio::Sink,
     out: StdoutLock<'a>,
+    cycle_ctr: usize,
 }
 
 impl<'a> CommandCenter<'a> {
     pub fn for_youtube(youtube_api_key: String,
-                       max_results: u32,
                        download_path: String,
                        out: StdoutLock<'a>)
                        -> CommandCenter<'a> {
         CommandCenter {
-            backend: Box::new(YoutubePlayer::new(youtube_api_key, max_results)),
+            backend: Box::new(YoutubePlayer::new(youtube_api_key)),
             currents: vec![],
             current: None,
             ytdl: YoutubeDl::new(download_path),
             sink: default_sink(),
             out: out,
+            cycle_ctr: 0,
         }
     }
 
@@ -47,38 +48,73 @@ impl<'a> CommandCenter<'a> {
             "pause" => self.pause(),
             "resume" => self.resume(),
             "related" => {
-                self.find_related();
-                self.select_interactive();
+                self.find_related("");
+                self.display_next();
             }
+            "cycle" => self.display_next(),
+            "reset" => self.reset(),
+            "now" => self.display_current(),
             "search" => {
                 if cmd_split.len() == 2 {
                     self.search(cmd_split[1]);
-                    self.select_interactive();
+                    self.display_next();
                 } else {
                     println!("Please enter non-empty search terms");
                 }
             }
+            "select" => self.select(cmd_split[1]),
             _ => println!("Unrecognized command!"),
         }
     }
 
-    fn select_interactive(&mut self) {
-        for (i, x) in self.currents.iter().enumerate() {
-            writeln!(self.out, "{0}: {1}", i, x.title).expect("Couldn't write to stdout");
-            display_png(x.thumbnail.as_ref(), &mut self.out);
-            writeln!(self.out, "").expect("Coudln't write to stdout");
+    fn display_next(&mut self) {
+        if self.cycle_ctr > self.currents.len() - 1 {
+            self.cycle_ctr = 0;
         }
-        let sel: usize = read!();
+        match self.currents.get(self.cycle_ctr) {
+            Some(x) => {
+                writeln!(self.out, "{0}: {1}", self.cycle_ctr, x.title)
+                    .expect("Couldn't write to stdout");
+                display_png(x.thumbnail.as_ref(), &mut self.out);
+            }
+            None => panic!("Shouldn't happen"),
+        }
+        self.cycle_ctr += 1;
+    }
+
+    fn reset(&mut self) {
+        self.cycle_ctr = 0;
+        self.currents.clear();
+    }
+
+    fn display_current(&mut self) {
+        match self.current {
+            Some(ref x) => {
+                writeln!(self.out, "NOW PLAYING: {0}", x.title).expect("Couldn't write to stdout");
+                display_png(x.thumbnail.as_ref(), &mut self.out);
+            }
+            None => writeln!(self.out, "Nothing currently playing. Use cycle and select")
+                .expect("Couldn't write to stdout"),
+        }
+    }
+
+    fn select(&mut self, sel: &str) {
+        let sel: usize = sel.parse().expect("Couldn't parse selection as number");
         self.current = self.currents.get(sel).cloned()
     }
 
     fn search(&mut self, search: &str) {
-        self.currents = self.backend.search(search)
+        self.currents.clear();
+        self.currents.append(&mut self.backend.search(search));
     }
 
-    fn find_related(&mut self) {
+    fn find_related(&mut self, _: &str) {
         match self.current {
-            Some(ref x) => self.currents = self.backend.find_related_tracks(x.id.as_str()),
+            Some(ref x) => {
+                self.currents.clear();
+                self.currents
+                    .append(&mut self.backend.find_related_tracks(x.id.as_str()));
+            }
             None => panic!("No current selection"),
         }
     }
@@ -143,5 +179,6 @@ fn display_png(path: Option<&PathBuf>, out: &mut StdoutLock) {
                           (SCALE_FACTOR * img_s.1 as f32) as u32);
         let resized = ops::resize_image(&img, (w__, h__));
         ops::write_ansi_truecolor(out, &resized);
+        writeln!(out, "\x1b[0m").expect("Couldn't write to stdout");
     }
 }

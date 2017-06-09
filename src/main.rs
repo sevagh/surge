@@ -4,8 +4,6 @@
 extern crate serde_derive;
 #[macro_use]
 extern crate lazy_static;
-#[macro_use]
-extern crate text_io;
 extern crate serde;
 extern crate serde_json;
 extern crate hyper;
@@ -45,7 +43,6 @@ struct Config {
 #[derive(Deserialize)]
 struct Yt {
     api_key: String,
-    max_results: u32,
 }
 
 fn main() {
@@ -70,10 +67,8 @@ fn main() {
     let config: Config = toml::from_str(&config_contents).unwrap();
 
     let out = stdout();
-    let mut cmd = CommandCenter::for_youtube(config.youtube.api_key,
-                                             config.youtube.max_results,
-                                             config.download_path,
-                                             out.lock());
+    let mut cmd =
+        CommandCenter::for_youtube(config.youtube.api_key, config.download_path, out.lock());
 
     let mut rl = Editor::<()>::new();
     if rl.load_history(history_path).is_err() {

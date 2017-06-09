@@ -15,7 +15,6 @@ dependencies = [
  "tempdir 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "termimage 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "terminal_size 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "text_io 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -841,11 +840,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "text_io"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
 name = "thread-id"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1103,7 +1097,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum term_size 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e2b6b55df3198cc93372e85dd2ed817f0e38ce8cc0f22eb32391bfad9c4bf209"
 "checksum termimage 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "6ce5f24bf215bb23f02528bd46483b0309ef33464403569c193deb249bc73f85"
 "checksum terminal_size 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "21fde5138fe7c1f4e9562e44697567a5aa967d09655b88a465fd7f0e26c694cc"
-"checksum text_io 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "090d2ee73ae8f01646d500fbb72f99f0b2aea174b7b15d58359bbdf083f73e6d"
 "checksum thread-id 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "a9539db560102d1cef46b8b78ce737ff0bb64e7e18d35b2a5688f7d097d0ff03"
 "checksum thread-id 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8df7875b676fddfadffd96deea3b1124e5ede707d4884248931077518cf1f773"
 "checksum thread_local 0.2.7 (registry+https://github.com/rust-lang/crates.io-index)" = "8576dbbfcaef9641452d5cf0df9b0e7eeab7694956dd33bb61515fb8f18cfdd5"
