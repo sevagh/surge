@@ -4,26 +4,25 @@ use term_size::dimensions;
 
 use download::Downloader;
 use backend::*;
-use audio::AudioPlayer;
+use mpv::{MpvHandler, MpvHandlerBuilder};
 
 use std::io::{StdoutLock, Write};
-use std::fs::File;
 use std::path::PathBuf;
 
 const SCALE_FACTOR: f32 = 0.5;
 
 pub struct CommandCenter<'a, 'b> {
     dl: Downloader<'b>,
-    backend: &'a Backend,
+    backend: &'a MasterBackend<'a>,
     currents: Vec<BackendSearchResult>,
     current: Option<BackendSearchResult>,
     out: StdoutLock<'a>,
     cycle_ctr: usize,
-    audio: AudioPlayer,
+    mpv: MpvHandler,
 }
 
 impl<'a, 'b> CommandCenter<'a, 'b> {
-    pub fn new(backend: &'a Backend,
+    pub fn new(backend: &'a MasterBackend,
                downloader: Downloader<'b>,
                out: StdoutLock<'a>)
                -> CommandCenter<'a, 'b> {
@@ -34,7 +33,10 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
             dl: downloader,
             out: out,
             cycle_ctr: 0,
-            audio: AudioPlayer::new(),
+            mpv: MpvHandlerBuilder::new()
+                .expect("Couldn't initialize MpvHandlerBuilder")
+                .build()
+                .expect("Couldn't build MpvHandler"),
         }
     }
 
@@ -50,8 +52,7 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
                 self.select(cmd_split[1]);
                 self.play(true);
             }
-            "pause" => self.pause(),
-            "resume" => self.resume(),
+            "pp" => self.pp(),
             "related" => {
                 self.related("");
                 self.cycle();
@@ -104,7 +105,7 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
                                                     &x.id),
                             &mut self.out);
             }
-            None => println!("Nothing currently playing. Use cycle and select"),
+            None => println!("Nothing currently playing."),
         }
     }
 
@@ -139,31 +140,28 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
                     Ok(x) => x,
                     Err(e) => panic!(e),
                 };
-                match File::open(path) {
-                    Ok(file) => {
-                        if !queue {
-                            self.audio.stop();
-                        }
-                        self.audio.queue(file);
-                        self.audio.play();
-                    }
-                    Err(e) => panic!(e),
+                if !queue {
+                    self.mpv
+                        .command(&["loadfile", &path, "replace"])
+                        .expect("Error loading file");
+                } else {
+                    self.mpv
+                        .command(&["loadfile", &path, "appendplay"])
+                        .expect("Error loading file");
                 }
             }
             None => panic!("No current selection"),
         }
     }
 
-    fn stop(&mut self) {
-        self.audio.stop();
+    pub fn stop(&mut self) {
+        self.mpv.command(&["stop"]).expect("Error stopping mpv");
     }
 
-    fn pause(&mut self) {
-        self.audio.pause();
-    }
-
-    fn resume(&mut self) {
-        self.audio.play();
+    fn pp(&mut self) {
+        self.mpv
+            .command(&["keypress", "p"])
+            .expect("Error pausing");
     }
 }
 
@@ -173,21 +171,15 @@ fn display_png(path: Option<PathBuf>, out: &mut StdoutLock) {
         None => return,
     };
     let tup = &(String::new(), path_);
-    let format = match ops::guess_format(tup) {
-        Ok(x) => x,
-        Err(e) => panic!(e),
-    };
-    let img = match ops::load_image(tup, format) {
-        Ok(x) => x,
-        Err(e) => panic!(e),
-    };
+    let format = ops::guess_format(tup).expect("Couldn't guess format of downloaded thumbnail");
+    let img = ops::load_image(tup, format).expect("Couldn't load downloaded thumbnail");
 
     if let Some((w, h)) = dimensions() {
-        let (w_, h_) = (w as u32, h as u32);
-        let img_s = ops::image_resized_size(img.dimensions(), (w_, h_), true);
-        let (w__, h__) = ((SCALE_FACTOR * img_s.0 as f32) as u32,
-                          (SCALE_FACTOR * img_s.1 as f32) as u32);
-        let resized = ops::resize_image(&img, (w__, h__));
+        let (w, h) = (w as u32, h as u32);
+        let img_s = ops::image_resized_size(img.dimensions(), (w, h), true);
+        let (w, h) = ((SCALE_FACTOR * img_s.0 as f32) as u32,
+                      (SCALE_FACTOR * img_s.1 as f32) as u32);
+        let resized = ops::resize_image(&img, (w, h));
         ops::write_ansi_truecolor(out, &resized);
         writeln!(out, "\x1b[0m").expect("Couldn't write to stdout");
     }

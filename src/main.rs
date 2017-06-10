@@ -10,21 +10,20 @@ extern crate hyper;
 extern crate hyper_native_tls;
 extern crate toml;
 extern crate rustyline;
-extern crate rodio;
 extern crate regex;
 extern crate termimage;
 extern crate image;
 extern crate term_size;
+extern crate mpv;
 
 mod youtube;
 mod download;
 mod command;
 mod backend;
-mod audio;
 
+use backend::{MasterBackend, BackendType};
 use command::CommandCenter;
 use download::Downloader;
-use youtube::YoutubePlayer;
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -42,24 +41,21 @@ const SURGE_PROMPT: &'static str = "surge ♫ ";
 
 #[derive(Deserialize)]
 struct Config {
-    download_path: String,
-    youtube: Yt,
-}
-
-#[derive(Deserialize)]
-struct Yt {
-    api_key: String,
+    download_path: Option<String>,
+    youtube_api_key: Option<String>,
 }
 
 fn main() {
     let conf_dir = format!("{}/{}", env!("HOME"), SURGE_CONF_DIR);
     let cache_dir = format!("{}/{}", env!("HOME"), SURGE_CACHE_DIR);
-    let thumbnail_cache_dir = format!("{}/thumbnails/", cache_dir);
+    let thumbnail_cache_dir = format!("{}/thumbnails", cache_dir);
+    let music_dl_dir = format!("{}/music", cache_dir);
     let conf_path = format!("{}/surgeconf.toml", conf_dir);
     let history_path = format!("{}/history.txt", cache_dir);
 
     create_dir_all(conf_dir).expect("Couldn't create conf dir");
     create_dir_all(thumbnail_cache_dir.clone()).expect("Coudln't create cache dir");
+    create_dir_all(music_dl_dir.clone()).expect("Coudln't create music dir");
 
     let mut config_contents = String::new();
 
@@ -82,9 +78,17 @@ fn main() {
     let connector = HttpsConnector::new(ssl);
     let client = Client::with_connector(connector);
 
-    let yt_backend = YoutubePlayer::new(config.youtube.api_key, &client);
-    let downloader = Downloader::new(config.download_path, thumbnail_cache_dir, &client);
-    let mut cmd = CommandCenter::new(&yt_backend, downloader, out.lock());
+    let mut backend = MasterBackend::new(config.youtube_api_key, &client);
+    backend.set_type(BackendType::Youtube);
+
+    let dlpath = match config.download_path {
+        Some(x) => x,
+        None => music_dl_dir,
+    };
+
+    let downloader = Downloader::new(dlpath, thumbnail_cache_dir, &client);
+
+    let mut cmd = CommandCenter::new(&backend, downloader, out.lock());
 
     let mut rl = Editor::<()>::new();
     if rl.load_history(&history_path).is_err() {
@@ -100,7 +104,10 @@ fn main() {
             }
             Err(ReadlineError::Interrupted) => continue,
             Err(ReadlineError::Eof) |
-            Err(_) => break,
+            Err(_) => {
+                cmd.stop();
+                break;
+            }
         }
     }
     rl.save_history(&history_path).unwrap();

@@ -8,14 +8,14 @@ use serde_json;
 const YT_API_URL: &'static str = "https://www.googleapis.com/youtube/v3";
 const YT_VID_BASE_URL: &'static str = "https://www.youtube.com/watch?v=";
 
-pub struct YoutubePlayer<'a> {
+pub struct YoutubeBackend<'a> {
     youtube_api_key: String,
     client: &'a Client,
 }
 
-impl<'a> YoutubePlayer<'a> {
-    pub fn new(youtube_api_key: String, client: &'a Client) -> YoutubePlayer<'a> {
-        YoutubePlayer {
+impl<'a> YoutubeBackend<'a> {
+    pub fn new(youtube_api_key: String, client: &'a Client) -> YoutubeBackend<'a> {
+        YoutubeBackend {
             youtube_api_key: youtube_api_key,
             client: client,
         }
@@ -39,7 +39,7 @@ impl<'a> YoutubePlayer<'a> {
     }
 }
 
-impl<'a> Backend for YoutubePlayer<'a> {
+impl<'a> Backend for YoutubeBackend<'a> {
     fn find_related_tracks(&self, video_id: &str) -> Vec<BackendSearchResult> {
         let api_result =
             self.hyper_request(format!("{0}/search?part=snippet&relatedToVideoId={1}&type=video",
