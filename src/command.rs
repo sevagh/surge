@@ -1,42 +1,40 @@
-use rodio;
 use termimage::ops;
-use terminal_size::*;
 use image::GenericImage;
+use term_size::dimensions;
 
-use youtube::YoutubePlayer;
-use youtube_dl::YoutubeDl;
+use download::Downloader;
 use backend::*;
+use audio::AudioPlayer;
 
-use std::io::{BufReader, StdoutLock, Write};
-use std::boxed::Box;
+use std::io::{StdoutLock, Write};
 use std::fs::File;
 use std::path::PathBuf;
 
 const SCALE_FACTOR: f32 = 0.5;
 
-pub struct CommandCenter<'a> {
-    ytdl: YoutubeDl,
-    backend: Box<Backend>,
+pub struct CommandCenter<'a, 'b> {
+    dl: Downloader<'b>,
+    backend: &'a Backend,
     currents: Vec<BackendSearchResult>,
     current: Option<BackendSearchResult>,
-    sink: rodio::Sink,
     out: StdoutLock<'a>,
     cycle_ctr: usize,
+    audio: AudioPlayer,
 }
 
-impl<'a> CommandCenter<'a> {
-    pub fn for_youtube(youtube_api_key: String,
-                       download_path: String,
-                       out: StdoutLock<'a>)
-                       -> CommandCenter<'a> {
+impl<'a, 'b> CommandCenter<'a, 'b> {
+    pub fn new(backend: &'a Backend,
+               downloader: Downloader<'b>,
+               out: StdoutLock<'a>)
+               -> CommandCenter<'a, 'b> {
         CommandCenter {
-            backend: Box::new(YoutubePlayer::new(youtube_api_key)),
+            backend: backend,
             currents: vec![],
             current: None,
-            ytdl: YoutubeDl::new(download_path),
-            sink: default_sink(),
+            dl: downloader,
             out: out,
             cycle_ctr: 0,
+            audio: AudioPlayer::new(),
         }
     }
 
@@ -44,57 +42,67 @@ impl<'a> CommandCenter<'a> {
         let cmd_split = command.splitn(2, ' ').collect::<Vec<&str>>();
         match cmd_split[0] {
             "" => (),
-            "play" => self.play_current(),
+            "play" => {
+                self.select(cmd_split[1]);
+                self.play(false);
+            }
+            "queue" => {
+                self.select(cmd_split[1]);
+                self.play(true);
+            }
             "pause" => self.pause(),
             "resume" => self.resume(),
             "related" => {
-                self.find_related("");
-                self.display_next();
+                self.related("");
+                self.cycle();
             }
-            "cycle" => self.display_next(),
-            "reset" => self.reset(),
-            "now" => self.display_current(),
+            "cycle" => self.cycle(),
+            "clear" => self.clear(),
+            "now" => self.now(),
+            "stop" => self.stop(),
             "search" => {
                 if cmd_split.len() == 2 {
                     self.search(cmd_split[1]);
-                    self.display_next();
+                    self.cycle();
                 } else {
                     println!("Please enter non-empty search terms");
                 }
             }
-            "select" => self.select(cmd_split[1]),
-            "help" => {
-                println!("Valid commands:\n\t\
-                                search, cycle, select, play, pause, resume, related, help")
-            }
+            "help" => unimplemented!(),
             _ => println!("Unrecognized command! Try 'help'"),
         }
     }
 
-    fn display_next(&mut self) {
+    fn cycle(&mut self) {
         if self.cycle_ctr > self.currents.len() - 1 {
             self.cycle_ctr = 0;
         }
         match self.currents.get(self.cycle_ctr) {
             Some(x) => {
                 println!("{0}: {1}", self.cycle_ctr, x.title);
-                display_png(x.thumbnail.as_ref(), &mut self.out);
+                display_png(self.dl
+                                .download_thumbnail(x.thumbnail.as_ref().map(String::as_str),
+                                                    &x.id),
+                            &mut self.out);
             }
             None => panic!("Shouldn't happen"),
         }
         self.cycle_ctr += 1;
     }
 
-    fn reset(&mut self) {
+    fn clear(&mut self) {
         self.cycle_ctr = 0;
         self.currents.clear();
     }
 
-    fn display_current(&mut self) {
+    fn now(&mut self) {
         match self.current {
             Some(ref x) => {
                 println!("NOW PLAYING: {0}", x.title);
-                display_png(x.thumbnail.as_ref(), &mut self.out);
+                display_png(self.dl
+                                .download_thumbnail(x.thumbnail.as_ref().map(String::as_str),
+                                                    &x.id),
+                            &mut self.out);
             }
             None => println!("Nothing currently playing. Use cycle and select"),
         }
@@ -106,13 +114,15 @@ impl<'a> CommandCenter<'a> {
     }
 
     fn search(&mut self, search: &str) {
+        self.cycle_ctr = 0;
         self.currents.clear();
         self.currents.append(&mut self.backend.search(search));
     }
 
-    fn find_related(&mut self, _: &str) {
+    fn related(&mut self, _: &str) {
         match self.current {
             Some(ref x) => {
+                self.cycle_ctr = 0;
                 self.currents.clear();
                 self.currents
                     .append(&mut self.backend.find_related_tracks(x.id.as_str()));
@@ -121,16 +131,21 @@ impl<'a> CommandCenter<'a> {
         }
     }
 
-    fn play_current(&mut self) {
+    fn play(&mut self, queue: bool) {
         match self.current {
             Some(ref mut x) => {
-                let path = download_audio(&self.ytdl, self.backend.gen_download_url(x.id.as_str()));
+                let path = match self.dl.download_audio_from_url(
+                    self.backend.gen_download_url(x.id.as_str())) {
+                    Ok(x) => x,
+                    Err(e) => panic!(e),
+                };
                 match File::open(path) {
                     Ok(file) => {
-                        self.sink
-                            .append(rodio::Decoder::new(BufReader::new(file))
-                                    .expect("Coudln't make rodio decoder"));
-                        self.sink.play();
+                        if !queue {
+                            self.audio.stop();
+                        }
+                        self.audio.queue(file);
+                        self.audio.play();
                     }
                     Err(e) => panic!(e),
                 }
@@ -139,27 +154,20 @@ impl<'a> CommandCenter<'a> {
         }
     }
 
+    fn stop(&mut self) {
+        self.audio.stop();
+    }
+
     fn pause(&mut self) {
-        self.sink.pause();
+        self.audio.pause();
     }
 
     fn resume(&mut self) {
-        self.sink.play();
+        self.audio.play();
     }
 }
 
-fn download_audio(ytdl: &YoutubeDl, url: String) -> String {
-    match ytdl.download_audio_from_url(url) {
-        Ok(x) => x,
-        Err(e) => panic!(e),
-    }
-}
-
-fn default_sink() -> rodio::Sink {
-    rodio::Sink::new(&rodio::get_default_endpoint().expect("Couldn't make rodio endpoint"))
-}
-
-fn display_png(path: Option<&PathBuf>, out: &mut StdoutLock) {
+fn display_png(path: Option<PathBuf>, out: &mut StdoutLock) {
     let path_ = match path {
         Some(x) => x.clone(),
         None => return,
@@ -174,7 +182,7 @@ fn display_png(path: Option<&PathBuf>, out: &mut StdoutLock) {
         Err(e) => panic!(e),
     };
 
-    if let Some((Width(w), Height(h))) = terminal_size() {
+    if let Some((w, h)) = dimensions() {
         let (w_, h_) = (w as u32, h as u32);
         let img_s = ops::image_resized_size(img.dimensions(), (w_, h_), true);
         let (w__, h__) = ((SCALE_FACTOR * img_s.0 as f32) as u32,

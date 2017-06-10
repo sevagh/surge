@@ -1,8 +1,6 @@
-use std::path::PathBuf;
-
 #[derive(Debug, Clone)]
 pub struct BackendSearchResult {
-    pub thumbnail: Option<PathBuf>,
+    pub thumbnail: Option<String>,
     pub id: String,
     pub title: String,
 }

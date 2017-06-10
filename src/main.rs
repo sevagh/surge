@@ -14,18 +14,23 @@ extern crate rodio;
 extern crate regex;
 extern crate termimage;
 extern crate image;
-extern crate tempdir;
-extern crate terminal_size;
+extern crate term_size;
 
 mod youtube;
-mod youtube_dl;
+mod download;
 mod command;
 mod backend;
+mod audio;
 
 use command::CommandCenter;
+use download::Downloader;
+use youtube::YoutubePlayer;
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
+use hyper::Client;
+use hyper::net::HttpsConnector;
+use hyper_native_tls::NativeTlsClient;
 
 use std::fs::{File, create_dir_all};
 use std::io::{stdout, BufReader};
@@ -49,11 +54,12 @@ struct Yt {
 fn main() {
     let conf_dir = format!("{}/{}", env!("HOME"), SURGE_CONF_DIR);
     let cache_dir = format!("{}/{}", env!("HOME"), SURGE_CACHE_DIR);
+    let thumbnail_cache_dir = format!("{}/thumbnails/", cache_dir);
     let conf_path = format!("{}/surgeconf.toml", conf_dir);
     let history_path = format!("{}/history.txt", cache_dir);
 
-    create_dir_all(conf_dir).expect("Couldn't create conf dir (if missing)");
-    create_dir_all(cache_dir).expect("Coudln't create cache dir (if missing)");
+    create_dir_all(conf_dir).expect("Couldn't create conf dir");
+    create_dir_all(thumbnail_cache_dir.clone()).expect("Coudln't create cache dir");
 
     let mut config_contents = String::new();
 
@@ -71,8 +77,14 @@ fn main() {
     let config: Config = toml::from_str(&config_contents).unwrap();
 
     let out = stdout();
-    let mut cmd =
-        CommandCenter::for_youtube(config.youtube.api_key, config.download_path, out.lock());
+
+    let ssl = NativeTlsClient::new().expect("Couldn't make TLS client");
+    let connector = HttpsConnector::new(ssl);
+    let client = Client::with_connector(connector);
+
+    let yt_backend = YoutubePlayer::new(config.youtube.api_key, &client);
+    let downloader = Downloader::new(config.download_path, thumbnail_cache_dir, &client);
+    let mut cmd = CommandCenter::new(&yt_backend, downloader, out.lock());
 
     let mut rl = Editor::<()>::new();
     if rl.load_history(&history_path).is_err() {
