@@ -45,14 +45,19 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
         match cmd_split[0] {
             "" => (),
             "play" => {
-                self.select(cmd_split[1]);
-                self.play(false);
+                if cmd_split.len() == 2 {
+                    self.select(cmd_split[1]);
+                    self.play(false);
+                } else {
+                    self.resume();
+                }
             }
             "queue" => {
                 self.select(cmd_split[1]);
                 self.play(true);
             }
-            "pp" => self.pp(),
+            "loop" => self.loop_(),
+            "pause" => self.pause(),
             "related" => {
                 self.related("");
                 self.cycle();
@@ -158,10 +163,34 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
         self.mpv.command(&["stop"]).expect("Error stopping mpv");
     }
 
-    fn pp(&mut self) {
+    fn pause(&mut self) {
         self.mpv
-            .command(&["keypress", "p"])
-            .expect("Error pausing");
+            .set_property("pause", true)
+            .expect("Toggling pause property");
+    }
+
+    fn resume(&mut self) {
+        self.mpv
+            .set_property("pause", false)
+            .expect("Toggling pause property");
+    }
+
+    fn loop_(&mut self) {
+        let next_loop = match self.mpv.get_property::<&str>("loop-file") {
+            Ok(x) => {
+                if x == "inf" || x == "yes" {
+                    "no"
+                } else if x == "no" || x == "1" {
+                    "inf"
+                } else {
+                    panic!("Unexpected value for loop-file property")
+                }
+            }
+            Err(e) => panic!(e),
+        };
+        self.mpv
+            .set_property("loop-file", next_loop)
+            .expect("Toggling loop-file property");
     }
 }
 
