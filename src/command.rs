@@ -2,9 +2,9 @@ use termimage::ops;
 use image::GenericImage;
 use term_size::dimensions;
 
+use player::AudioPlayer;
 use download::Downloader;
 use backend::*;
-use mpv::{MpvHandler, MpvHandlerBuilder};
 
 use std::io::{StdoutLock, Write};
 use std::path::PathBuf;
@@ -18,7 +18,7 @@ pub struct CommandCenter<'a, 'b> {
     current: Option<BackendSearchResult>,
     out: StdoutLock<'a>,
     cycle_ctr: usize,
-    mpv: MpvHandler,
+    player: AudioPlayer,
 }
 
 impl<'a, 'b> CommandCenter<'a, 'b> {
@@ -33,10 +33,7 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
             dl: downloader,
             out: out,
             cycle_ctr: 0,
-            mpv: MpvHandlerBuilder::new()
-                .expect("Couldn't initialize MpvHandlerBuilder")
-                .build()
-                .expect("Couldn't build MpvHandler"),
+            player: AudioPlayer::new(),
         }
     }
 
@@ -47,17 +44,20 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
             "play" => {
                 if cmd_split.len() == 2 {
                     self.select(cmd_split[1]);
-                    self.play(false);
+                    let dl = self.download();
+                    self.player.queue_and_play(dl);
                 } else {
-                    self.resume();
+                    self.player.resume();
                 }
             }
             "queue" => {
                 self.select(cmd_split[1]);
-                self.play(true);
+                let dl = self.download();
+                self.player.queue(dl);
             }
-            "loop" => self.loop_(),
-            "pause" => self.pause(),
+            "loop" => self.player.loop_(),
+            "pause" => self.player.pause(),
+            "fluid" => self.fluid(),
             "related" => {
                 self.related("");
                 self.cycle();
@@ -76,6 +76,21 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
             }
             "help" => unimplemented!(),
             _ => println!("Unrecognized command! Try 'help'"),
+        }
+    }
+
+    fn fluid(&mut self) {
+        println!("Continous playback mode... ctrl-c to exit");
+        let mut loc_cyc = 0;
+        loop {
+            self.related("");
+            if loc_cyc >= self.currents.len() {
+                loc_cyc = 0;
+            }
+            self.select(&format!("{}", loc_cyc));
+            loc_cyc += 1;
+            let dl = self.download();
+            self.player.queue_on_file_event_blocking(dl);
         }
     }
 
@@ -116,7 +131,14 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
 
     fn select(&mut self, sel: &str) {
         let sel: usize = sel.parse().expect("Couldn't parse selection as number");
-        self.current = self.currents.get(sel).cloned()
+        self.current = Some(self.currents.remove(sel));
+        if let Some(ref x) = self.current {
+            println!("SELECTED: {0}", x.title);
+            display_png(self.dl
+                            .download_thumbnail(x.thumbnail.as_ref().map(String::as_str),
+                                                &x.id),
+                        &mut self.out);
+        }
     }
 
     fn search(&mut self, search: &str) {
@@ -137,22 +159,13 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
         }
     }
 
-    fn play(&mut self, queue: bool) {
+    fn download(&mut self) -> String {
         match self.current {
             Some(ref mut x) => {
-                let path = match self.dl.download_audio_from_url(
+                match self.dl.download_audio_from_url(
                     self.backend.gen_download_url(x.id.as_str())) {
                     Ok(x) => x,
                     Err(e) => panic!(e),
-                };
-                if !queue {
-                    self.mpv
-                        .command(&["loadfile", &path, "replace"])
-                        .expect("Error loading file");
-                } else {
-                    self.mpv
-                        .command(&["loadfile", &path, "appendplay"])
-                        .expect("Error loading file");
                 }
             }
             None => panic!("No current selection"),
@@ -160,37 +173,7 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
     }
 
     pub fn stop(&mut self) {
-        self.mpv.command(&["stop"]).expect("Error stopping mpv");
-    }
-
-    fn pause(&mut self) {
-        self.mpv
-            .set_property("pause", true)
-            .expect("Toggling pause property");
-    }
-
-    fn resume(&mut self) {
-        self.mpv
-            .set_property("pause", false)
-            .expect("Toggling pause property");
-    }
-
-    fn loop_(&mut self) {
-        let next_loop = match self.mpv.get_property::<&str>("loop-file") {
-            Ok(x) => {
-                if x == "inf" || x == "yes" {
-                    "no"
-                } else if x == "no" || x == "1" {
-                    "inf"
-                } else {
-                    panic!("Unexpected value for loop-file property")
-                }
-            }
-            Err(e) => panic!(e),
-        };
-        self.mpv
-            .set_property("loop-file", next_loop)
-            .expect("Toggling loop-file property");
+        self.player.stop();
     }
 }
 

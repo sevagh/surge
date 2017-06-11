@@ -20,6 +20,7 @@ mod youtube;
 mod download;
 mod command;
 mod backend;
+mod player;
 
 use backend::{MasterBackend, BackendType};
 use command::CommandCenter;
