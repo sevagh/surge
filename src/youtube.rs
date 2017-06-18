@@ -6,15 +6,14 @@ use hyper::Client;
 use serde_json;
 
 const YT_API_URL: &'static str = "https://www.googleapis.com/youtube/v3";
-const YT_VID_BASE_URL: &'static str = "https://www.youtube.com/watch?v=";
 
-pub struct YoutubeBackend<'a> {
+pub struct YoutubeBackend {
     youtube_api_key: String,
-    client: &'a Client,
+    client: Client,
 }
 
-impl<'a> YoutubeBackend<'a> {
-    pub fn new(youtube_api_key: String, client: &'a Client) -> YoutubeBackend<'a> {
+impl YoutubeBackend {
+    pub fn new(youtube_api_key: String, client: Client) -> YoutubeBackend {
         YoutubeBackend {
             youtube_api_key: youtube_api_key,
             client: client,
@@ -39,31 +38,30 @@ impl<'a> YoutubeBackend<'a> {
     }
 }
 
-impl<'a> Backend for YoutubeBackend<'a> {
+impl Backend for YoutubeBackend {
     fn find_related_tracks(&self, video_id: &str) -> Vec<BackendSearchResult> {
-        let api_result =
-            self.hyper_request(format!("{0}/search?part=snippet&relatedToVideoId={1}&type=video",
-                                       YT_API_URL,
-                                       video_id)
-                                       .as_str());
+        let api_result = self.hyper_request(
+            format!(
+                "{0}/search?part=snippet&relatedToVideoId={1}&type=video",
+                YT_API_URL,
+                video_id
+            ).as_str(),
+        );
 
         yt_json_parser(&api_result)
     }
 
     fn search(&self, keywords: &str) -> Vec<BackendSearchResult> {
-        let api_result = self.hyper_request(format!("{0}/search?part=snippet&q={1}&type=video",
-                                                    YT_API_URL,
-                                                    keywords.replace(" ", "+"))
-                                                    .as_str());
+        let api_result = self.hyper_request(
+            format!(
+                "{0}/search?part=snippet&q={1}&type=video",
+                YT_API_URL,
+                keywords.replace(" ", "+")
+            ).as_str(),
+        );
         yt_json_parser(&api_result)
     }
-
-
-    fn gen_download_url(&self, video_id: &str) -> String {
-        format!("{0}{1}", YT_VID_BASE_URL, video_id)
-    }
 }
-
 
 fn yt_json_parser(yt_json: &str) -> Vec<BackendSearchResult> {
     let results: Vec<BackendSearchResult>;
@@ -74,12 +72,12 @@ fn yt_json_parser(yt_json: &str) -> Vec<BackendSearchResult> {
                 .expect("Didn't get expected response from youtube api")
                 .iter()
                 .map(|video_obj| {
-                    let title = String::from(video_obj["snippet"]["title"]
-                                                 .as_str()
-                                                 .expect("Youtube response didn't contain title"));
-                    let id = String::from(video_obj["id"]["videoId"]
-                                              .as_str()
-                                              .expect("Youtube response didn't contain id"));
+                    let title = String::from(video_obj["snippet"]["title"].as_str().expect(
+                        "Youtube response didn't contain title",
+                    ));
+                    let id = String::from(video_obj["id"]["videoId"].as_str().expect(
+                        "Youtube response didn't contain id",
+                    ));
 
                     let thumbnail = video_obj["snippet"]["thumbnails"]["default"]["url"]
                         .as_str()

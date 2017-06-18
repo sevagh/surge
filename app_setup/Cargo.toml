@@ -1,0 +1,13 @@
+[package]
+name = "app_setup"
+version = "0.1.0"
+authors = ["Sevag Hanssian <sevag.hanssian@gmail.com>"]
+description = "initial interactive config setup for your cli tool"
+repository = "https://github.com/sevagh/appsetup"
+readme = "./README.md"
+license = "MIT"
+
+[dependencies]
+rustyline = "1.0.0"
+app_dirs = "1.1.1"
+rust-ini = "0.10.0"

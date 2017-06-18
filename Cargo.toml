@@ -11,9 +11,6 @@ keywords = ["music", "cli"]
 [dependencies]
 hyper = "0.10.11"
 hyper-native-tls = "0.2.3"
-toml = "0.4.1"
-serde_derive = "1.0.8"
-serde = "1.0.8"
 serde_json = "1.0.2"
 rustyline = "1.0.0"
 regex = "0.2.2"
@@ -22,6 +19,12 @@ termimage = "0.3.1"
 term_size = "0.2.3"
 image = "0.10.0"
 mpv = "0.2.3"
+app_setup = { path = "app_setup", version = "0.1.0" }
+app_dirs = "1.1.1"
+rust-ini = "0.10.0"
+
+[workspace]
+members = ["app_setup"]
 
 [profile.release]
 debug = true

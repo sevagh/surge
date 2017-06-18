@@ -1,20 +1,21 @@
 #![crate_type = "bin"]
+#![feature(const_fn)]
+#![feature(drop_types_in_const)]
 
 #[macro_use]
-extern crate serde_derive;
-#[macro_use]
 extern crate lazy_static;
-extern crate serde;
 extern crate serde_json;
 extern crate hyper;
 extern crate hyper_native_tls;
-extern crate toml;
 extern crate rustyline;
 extern crate regex;
 extern crate termimage;
 extern crate image;
 extern crate term_size;
 extern crate mpv;
+extern crate app_dirs;
+extern crate app_setup;
+extern crate ini;
 
 mod youtube;
 mod download;
@@ -22,74 +23,65 @@ mod command;
 mod backend;
 mod player;
 
-use backend::{MasterBackend, BackendType};
 use command::CommandCenter;
+use backend::MasterBackend;
 use download::Downloader;
+use player::AudioPlayer;
 
+use app_dirs::*;
+use app_setup::appsetup;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
-use hyper::Client;
-use hyper::net::HttpsConnector;
-use hyper_native_tls::NativeTlsClient;
+use ini::Ini;
 
-use std::fs::{File, create_dir_all};
-use std::io::{stdout, BufReader};
-use std::io::prelude::*;
+use std::io::stdout;
+use std::collections::HashMap;
 
-const SURGE_CONF_DIR: &'static str = ".config/surge";
-const SURGE_CACHE_DIR: &'static str = ".cache/surge";
+const SURGE_APP_INFO: AppInfo = AppInfo {
+    name: "surge",
+    author: "Sevag Hanssian",
+};
 const SURGE_PROMPT: &'static str = "surge ♫ ";
-
-#[derive(Deserialize)]
-struct Config {
-    download_path: Option<String>,
-    youtube_api_key: Option<String>,
-}
+const SURGE_CONF: &'static str = "surge.ini";
 
 fn main() {
-    let conf_dir = format!("{}/{}", env!("HOME"), SURGE_CONF_DIR);
-    let cache_dir = format!("{}/{}", env!("HOME"), SURGE_CACHE_DIR);
-    let thumbnail_cache_dir = format!("{}/thumbnails", cache_dir);
-    let music_dl_dir = format!("{}/music", cache_dir);
-    let conf_path = format!("{}/surgeconf.toml", conf_dir);
-    let history_path = format!("{}/history.txt", cache_dir);
-
-    create_dir_all(conf_dir).expect("Couldn't create conf dir");
-    create_dir_all(thumbnail_cache_dir.clone()).expect("Coudln't create cache dir");
-    create_dir_all(music_dl_dir.clone()).expect("Coudln't create music dir");
-
-    let mut config_contents = String::new();
-
-    match File::open(conf_path) {
-        Ok(x) => {
-            let mut buf_reader = BufReader::new(x);
-            match buf_reader.read_to_string(&mut config_contents) {
-                Ok(_) => (),
-                Err(e) => panic!(e),
-            }
-        }
-        Err(e) => panic!(e),
-    }
-
-    let config: Config = toml::from_str(&config_contents).unwrap();
-
     let out = stdout();
 
-    let ssl = NativeTlsClient::new().expect("Couldn't make TLS client");
-    let connector = HttpsConnector::new(ssl);
-    let client = Client::with_connector(connector);
+    let mut history_path = get_app_root(AppDataType::UserCache, &SURGE_APP_INFO)
+        .expect("Couldn't get user cache dir");
+    history_path.push("history.txt");
 
-    let mut backend = MasterBackend::new(config.youtube_api_key, &client);
-    backend.set_type(BackendType::Youtube);
+    let desired_config: HashMap<Option<&str>, Vec<&str>> = [(Some("global"), vec!["yt_api_key"])]
+        .iter()
+        .cloned()
+        .collect();
 
-    let dlpath = match config.download_path {
-        Some(x) => x,
-        None => music_dl_dir,
+    let mut conf_file_path = get_app_root(AppDataType::UserConfig, &SURGE_APP_INFO)
+        .expect("Couldn't get user config dir");
+    conf_file_path.push(SURGE_CONF);
+
+    let config = if conf_file_path.exists() {
+        Ini::load_from_file(conf_file_path).expect("Couldn't load ini from config file")
+    } else {
+        appsetup(&SURGE_APP_INFO, desired_config, SURGE_CONF)
     };
 
-    let downloader = Downloader::new(dlpath, thumbnail_cache_dir, &client);
+    let yt_api_key = config
+        .section(Some("global"))
+        .expect("Couldn't get None section of ini file")
+        .get("yt_api_key")
+        .expect("Missing yt_api_key config");
 
-    let mut cmd = CommandCenter::new(&backend, downloader, out.lock());
+    let mut backend = MasterBackend::new(yt_api_key);
+    let mut player = AudioPlayer::new();
+    let mut dloader = Downloader::new(
+        app_dir(AppDataType::UserData, &SURGE_APP_INFO, "music")
+            .expect("Couldn't get user data dir"),
+        app_dir(AppDataType::UserCache, &SURGE_APP_INFO, "thumbnails")
+            .expect("Couldn't get user cache dir"),
+    );
+
+    let mut cmd = CommandCenter::new(out.lock(), &mut player, &mut dloader, &mut backend);
 
     let mut rl = Editor::<()>::new();
     if rl.load_history(&history_path).is_err() {

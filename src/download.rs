@@ -6,42 +6,60 @@ use std::fs::File;
 use std::io::{Error, copy};
 
 use hyper::Client;
+use hyper::net::HttpsConnector;
+use hyper_native_tls::NativeTlsClient;
 
-pub struct Downloader<'a> {
-    music_dl_path: String,
-    thumbnail_cache_path: String,
-    client: &'a Client,
+pub struct Downloader {
+    client: Client,
+    music_dir: PathBuf,
+    thumbnail_dir: PathBuf,
 }
 
-impl<'a> Downloader<'a> {
-    pub fn new(dl_path: String,
-               thumbnail_cache_path: String,
-               client: &'a Client)
-               -> Downloader<'a> {
+impl Downloader {
+    pub fn new(music_dir: PathBuf, thumbnail_dir: PathBuf) -> Downloader {
+        let ssl = NativeTlsClient::new().expect("Couldn't make TLS client");
+        let connector = HttpsConnector::new(ssl);
+        let client = Client::with_connector(connector);
+
         Downloader {
-            music_dl_path: dl_path,
-            thumbnail_cache_path: thumbnail_cache_path,
-            client: client,
+            client,
+            music_dir,
+            thumbnail_dir,
         }
     }
 
-    pub fn download_audio_from_url(&self, url: String) -> Result<String, Error> {
-        let dl_opt = format!("{0}/%(title)s.%(ext)s", self.music_dl_path);
+    pub fn download_audio_from_yt(&self, id: &str, nodl: bool) -> Result<String, Error> {
+        let dl_opt = format!(
+            "{0}/%(title)s.%(ext)s",
+            self.music_dir.to_str().expect(
+                "Coudln't convert music_dir to str",
+            )
+        );
+        let dl_url = format!("https://www.youtube.com/watch?v={0}", id);
 
+        if nodl {
+            return Ok(dl_url);
+        }
         match Command::new("youtube-dl")
-                  .args(&["--extract-audio",
-                          "--audio-format",
-                          "flac",
-                          "--audio-quality",
-                          "0",
-                          "-o",
-                          &dl_opt,
-                          &url])
-                  .output() {
+            .args(
+                &[
+                    "--extract-audio",
+                    "--audio-format",
+                    "flac",
+                    "--audio-quality",
+                    "0",
+                    "-o",
+                    &dl_opt,
+                    &dl_url,
+                ],
+            )
+            .output() {
             Ok(output) => {
-                Ok(get_dl_path_from_ytdl_stdout(String::from_utf8_lossy(&output.stdout)
-                                                    .into_owned()
-                                                    .as_str()))
+                Ok(get_dl_path_from_ytdl_stdout(
+                    String::from_utf8_lossy(&output.stdout)
+                        .into_owned()
+                        .as_str(),
+                ))
             }
             Err(e) => Err(e),
         }
@@ -52,10 +70,12 @@ impl<'a> Downloader<'a> {
             Some(x) => x,
             None => return None,
         };
-        let thumbnail_cache_path_loc = self.thumbnail_cache_path.clone();
-        let file_path = PathBuf::from(thumbnail_cache_path_loc).join(format!("{0}_{1}",
-                        uid,
-                        url.rsplitn(2, '/').collect::<Vec<&str>>()[0]));
+        let mut file_path = self.thumbnail_dir.clone();
+        file_path.push(format!(
+            "{0}_{1}",
+            uid,
+            url.rsplitn(2, '/').collect::<Vec<&str>>()[0]
+        ));
         let file_path_copy = file_path.clone();
         if file_path.exists() {
             return Some(file_path_copy);
@@ -78,9 +98,11 @@ impl<'a> Downloader<'a> {
 
 fn get_dl_path_from_ytdl_stdout(out: &str) -> String {
     lazy_static! {
-        static ref RE: Regex = Regex::new("Destination:.*flac\n").unwrap();
+        static ref RE: Regex = Regex::new("Destination:.*flac\n").expect("Couldn't recreate regex");
     }
-    let cap = RE.captures(out).unwrap();
+    let cap = RE.captures(out).expect(
+        "Didn't find dl path output from ytdl",
+    );
     let mut ret = String::from(&cap[0][13..]);
     ret.pop();
     ret

@@ -2,7 +2,7 @@ use termimage::ops;
 use image::GenericImage;
 use term_size::dimensions;
 
-use player::AudioPlayer;
+use player::*;
 use download::Downloader;
 use backend::*;
 
@@ -11,29 +11,33 @@ use std::path::PathBuf;
 
 const SCALE_FACTOR: f32 = 0.5;
 
-pub struct CommandCenter<'a, 'b> {
-    dl: Downloader<'b>,
-    backend: &'a MasterBackend<'a>,
+pub struct CommandCenter<'a> {
     currents: Vec<BackendSearchResult>,
     current: Option<BackendSearchResult>,
     out: StdoutLock<'a>,
     cycle_ctr: usize,
-    player: AudioPlayer,
+    nodl: bool,
+    player: &'a mut AudioPlayer,
+    dloader: &'a mut Downloader,
+    backend: &'a mut MasterBackend,
 }
 
-impl<'a, 'b> CommandCenter<'a, 'b> {
-    pub fn new(backend: &'a MasterBackend,
-               downloader: Downloader<'b>,
-               out: StdoutLock<'a>)
-               -> CommandCenter<'a, 'b> {
+impl<'a> CommandCenter<'a> {
+    pub fn new(
+        out: StdoutLock<'a>,
+        player: &'a mut AudioPlayer,
+        dloader: &'a mut Downloader,
+        backend: &'a mut MasterBackend,
+    ) -> CommandCenter<'a> {
         CommandCenter {
-            backend: backend,
             currents: vec![],
             current: None,
-            dl: downloader,
             out: out,
             cycle_ctr: 0,
-            player: AudioPlayer::new(),
+            nodl: true,
+            player: player,
+            dloader: dloader,
+            backend: backend,
         }
     }
 
@@ -44,27 +48,35 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
             "play" => {
                 if cmd_split.len() == 2 {
                     self.select(cmd_split[1]);
-                    let dl = self.download();
+                    let dl = self.download().expect("Couldn't dl song");
                     self.player.queue_and_play(dl);
-                } else {
-                    self.player.resume();
                 }
+                self.player.resume();
+            }
+            "download" => {
+                if self.nodl {
+                    println!("Toggling download mode: ON")
+                } else {
+                    println!("Toggling download mode: OFF")
+                }
+                self.nodl = !self.nodl;
             }
             "queue" => {
                 self.select(cmd_split[1]);
-                let dl = self.download();
+                let dl = self.download().expect("Couldn't dl song");
                 self.player.queue(dl);
             }
             "loop" => self.player.loop_(),
             "pause" => self.player.pause(),
-            "fluid" => self.fluid(),
             "related" => {
                 self.related("");
                 self.cycle();
             }
             "cycle" => self.cycle(),
-            "clear" => self.clear(),
-            "now" => self.now(),
+            "now" => {
+                self.now();
+                self.player.print_time_remain();
+            }
             "stop" => self.stop(),
             "search" => {
                 if cmd_split.len() == 2 {
@@ -79,21 +91,6 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
         }
     }
 
-    fn fluid(&mut self) {
-        println!("Continous playback mode... ctrl-c to exit");
-        let mut loc_cyc = 0;
-        loop {
-            self.related("");
-            if loc_cyc >= self.currents.len() {
-                loc_cyc = 0;
-            }
-            self.select(&format!("{}", loc_cyc));
-            loc_cyc += 1;
-            let dl = self.download();
-            self.player.queue_on_file_event_blocking(dl);
-        }
-    }
-
     fn cycle(&mut self) {
         if self.cycle_ctr > self.currents.len() - 1 {
             self.cycle_ctr = 0;
@@ -101,29 +98,30 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
         match self.currents.get(self.cycle_ctr) {
             Some(x) => {
                 println!("{0}: {1}", self.cycle_ctr, x.title);
-                display_png(self.dl
-                                .download_thumbnail(x.thumbnail.as_ref().map(String::as_str),
-                                                    &x.id),
-                            &mut self.out);
+                display_png(
+                    self.dloader.download_thumbnail(
+                        x.thumbnail.as_ref().map(String::as_str),
+                        &x.id,
+                    ),
+                    &mut self.out,
+                );
             }
             None => panic!("Shouldn't happen"),
         }
         self.cycle_ctr += 1;
     }
 
-    fn clear(&mut self) {
-        self.cycle_ctr = 0;
-        self.currents.clear();
-    }
-
     fn now(&mut self) {
         match self.current {
             Some(ref x) => {
                 println!("NOW PLAYING: {0}", x.title);
-                display_png(self.dl
-                                .download_thumbnail(x.thumbnail.as_ref().map(String::as_str),
-                                                    &x.id),
-                            &mut self.out);
+                display_png(
+                    self.dloader.download_thumbnail(
+                        x.thumbnail.as_ref().map(String::as_str),
+                        &x.id,
+                    ),
+                    &mut self.out,
+                );
             }
             None => println!("Nothing currently playing."),
         }
@@ -134,10 +132,13 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
         self.current = Some(self.currents.remove(sel));
         if let Some(ref x) = self.current {
             println!("SELECTED: {0}", x.title);
-            display_png(self.dl
-                            .download_thumbnail(x.thumbnail.as_ref().map(String::as_str),
-                                                &x.id),
-                        &mut self.out);
+            display_png(
+                self.dloader.download_thumbnail(
+                    x.thumbnail.as_ref().map(String::as_str),
+                    &x.id,
+                ),
+                &mut self.out,
+            );
         }
     }
 
@@ -152,23 +153,26 @@ impl<'a, 'b> CommandCenter<'a, 'b> {
             Some(ref x) => {
                 self.cycle_ctr = 0;
                 self.currents.clear();
-                self.currents
-                    .append(&mut self.backend.find_related_tracks(x.id.as_str()));
+                self.currents.append(&mut self.backend.find_related_tracks(
+                    x.id.as_str(),
+                ));
             }
             None => panic!("No current selection"),
         }
     }
 
-    fn download(&mut self) -> String {
+    fn download(&mut self) -> Option<String> {
         match self.current {
             Some(ref mut x) => {
-                match self.dl.download_audio_from_url(
-                    self.backend.gen_download_url(x.id.as_str())) {
-                    Ok(x) => x,
-                    Err(e) => panic!(e),
+                match self.dloader.download_audio_from_yt(
+                    x.id.as_str(),
+                    self.nodl,
+                ) {
+                    Ok(x) => Some(x),
+                    Err(_) => None,
                 }
             }
-            None => panic!("No current selection"),
+            None => None,
         }
     }
 
@@ -189,8 +193,10 @@ fn display_png(path: Option<PathBuf>, out: &mut StdoutLock) {
     if let Some((w, h)) = dimensions() {
         let (w, h) = (w as u32, h as u32);
         let img_s = ops::image_resized_size(img.dimensions(), (w, h), true);
-        let (w, h) = ((SCALE_FACTOR * img_s.0 as f32) as u32,
-                      (SCALE_FACTOR * img_s.1 as f32) as u32);
+        let (w, h) = (
+            (SCALE_FACTOR * img_s.0 as f32) as u32,
+            (SCALE_FACTOR * img_s.1 as f32) as u32,
+        );
         let resized = ops::resize_image(&img, (w, h));
         ops::write_ansi_truecolor(out, &resized);
         writeln!(out, "\x1b[0m").expect("Couldn't write to stdout");
