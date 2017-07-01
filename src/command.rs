@@ -47,9 +47,14 @@ impl<'a> CommandCenter<'a> {
             "" => (),
             "play" => {
                 if cmd_split.len() == 2 {
-                    self.select(cmd_split[1]);
-                    let dl = self.download().expect("Couldn't dl song");
-                    self.player.queue_and_play(dl);
+                    if let Ok(sel) = cmd_split[1].parse() {
+                        self.select(sel);
+                        let dl = self.download().expect("Couldn't dl song");
+                        self.player.queue_and_play(dl);
+                    } else {
+                        println!("Please pick a valid selection");
+                        return;
+                    }
                 }
                 self.player.resume();
             }
@@ -62,7 +67,12 @@ impl<'a> CommandCenter<'a> {
                 self.nodl = !self.nodl;
             }
             "queue" => {
-                self.select(cmd_split[1]);
+                if let Ok(sel) = cmd_split[1].parse() {
+                    self.select(sel);
+                } else {
+                    println!("Please pick a valid selection");
+                    return;
+                }
                 let dl = self.download().expect("Couldn't dl song");
                 self.player.queue(dl);
             }
@@ -127,8 +137,7 @@ impl<'a> CommandCenter<'a> {
         }
     }
 
-    fn select(&mut self, sel: &str) {
-        let sel: usize = sel.parse().expect("Couldn't parse selection as number");
+    fn select(&mut self, sel: usize) {
         self.current = Some(self.currents.remove(sel));
         if let Some(ref x) = self.current {
             println!("SELECTED: {0}", x.title);

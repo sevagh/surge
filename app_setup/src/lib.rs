@@ -16,7 +16,7 @@ pub fn appsetup(
     config: HashMap<Option<&str>, Vec<&str>>,
     config_file_name: &str,
 ) -> Ini {
-    let mut app_conf = app_root(AppDataType::UserConfig, &app_info).expect(
+    let mut app_conf = app_root(AppDataType::UserConfig, app_info).expect(
         "Couldn't create platform-specific config dir",
     );
     app_conf.push(config_file_name);
